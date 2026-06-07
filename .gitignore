@@ -1,0 +1,65 @@
+# =============================================================================
+# Secrets — real keys live ONLY in untracked .env files. Never commit them.
+# Only the placeholder template (.env.example) is tracked.
+# =============================================================================
+.env
+.env.*
+!.env.example
+!infra/env/.env.example
+*.pem
+
+# =============================================================================
+# Python (apps/voice-agent)
+# =============================================================================
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# =============================================================================
+# Node / Next (apps/dashboard)
+# =============================================================================
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# =============================================================================
+# Editor / OS
+# =============================================================================
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# =============================================================================
+# Obsidian vault state — docs render in Obsidian, but its config is local-only
+# =============================================================================
+.obsidian/
+
+# =============================================================================
+# Design docs — kept local. Public repo ships code + the root README only.
+# =============================================================================
+/docs/
+
+# =============================================================================
+# Local agent tooling — keep project slash-commands + hooks (.claude/commands,
+# .claude/settings.json); drop personal/global tooling and machine-specific config.
+# =============================================================================
+CLAUDE.md
+.mcp.json
+.agents/
+.claude/skills/
+.claude/launch.json
+.claude/settings.local.json
+skills-lock.json
+
+# Code-review-graph cache (tool-generated)
+.code-review-graph/

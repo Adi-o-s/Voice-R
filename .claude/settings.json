@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(uv run:*)",
+      "Bash(uvicorn:*)",
+      "Bash(pnpm:*)",
+      "Bash(corepack:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(black:*)",
+      "Bash(prettier:*)",
+      "Bash(make:*)",
+      "Bash(git status)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(ngrok:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh repo view:*)",
+      "Bash(ls:*)",
+      "Bash(cat docs/*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'jq -r .tool_input.file_path 2>/dev/null | while read f; do case \"$f\" in *.py) (cd \"$CLAUDE_PROJECT_DIR\" && ruff check --fix --quiet \"$f\" 2>/dev/null; black --quiet \"$f\" 2>/dev/null) ;; *.ts|*.tsx|*.js|*.jsx|*.json) (cd \"$CLAUDE_PROJECT_DIR\" && prettier --write --log-level silent \"$f\" 2>/dev/null) ;; esac; done; exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >/dev/null || true; git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph update --skip-flows --repo \"/Users/aditya/Documents/Mission/voice-ai-receptionist\" || true",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat >/dev/null || true; git rev-parse --git-dir >/dev/null 2>&1 && code-review-graph status --repo \"/Users/aditya/Documents/Mission/voice-ai-receptionist\" || echo 'Not a git repo, skipping'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "_comment": "Hooks auto-format Python files with ruff+black and JS/TS files with prettier after every Edit/Write. Errors are swallowed so a missing formatter never blocks an edit. To disable a hook temporarily, comment it out and restart Claude Code."
+}
