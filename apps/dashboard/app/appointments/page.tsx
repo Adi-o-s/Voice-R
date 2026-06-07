@@ -39,15 +39,15 @@ export default async function AppointmentsPage() {
           <p className="text-sm text-muted-foreground">No bookings yet.</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted/40">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Customer</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Service</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Scheduled</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Code</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+            <thead className="border-b border-border bg-muted/50">
+              <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:text-left [&>th]:text-[11px] [&>th]:font-bold [&>th]:uppercase [&>th]:tracking-wider [&>th]:text-muted-foreground">
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Scheduled</th>
+                <th>Code</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

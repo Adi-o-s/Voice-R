@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { OutcomeBadge } from "@/components/outcome-badge";
+import { KpiCard } from "@/components/kpi-card";
 import type { Call } from "@/lib/types";
 
 function fmt(iso: string) {
@@ -44,6 +45,26 @@ export default function HomePage() {
     return () => { sb.removeChannel(sub); };
   }, []);
 
+  // Top-line stats computed over the loaded window (matches the Stitch Live screen).
+  const active = calls.filter((c) => c.outcome === "in_progress").length;
+  const ended = calls.filter((c) => c.ended_at);
+  const avgDurS = ended.length
+    ? Math.round(
+        ended.reduce(
+          (a, c) =>
+            a + (new Date(c.ended_at!).getTime() - new Date(c.started_at).getTime()) / 1000,
+          0,
+        ) / ended.length,
+      )
+    : null;
+  const avgDur =
+    avgDurS == null ? "—" : avgDurS < 60 ? `${avgDurS}s` : `${Math.floor(avgDurS / 60)}m ${avgDurS % 60}s`;
+  const llmVals = calls
+    .map((c) => c.latency_metrics?.llm_ms_p50)
+    .filter((v): v is number => v != null)
+    .sort((a, b) => a - b);
+  const p50 = llmVals.length ? llmVals[Math.floor((llmVals.length - 1) / 2)] : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -53,6 +74,12 @@ export default function HomePage() {
         </p>
       </div>
 
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <KpiCard label="Active calls" value={active} />
+        <KpiCard label="Avg duration" value={avgDur} />
+        <KpiCard label="LLM p50" value={p50 != null ? `${p50}ms` : "—"} />
+      </div>
+
       {calls.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/40 p-12 text-center">
           <p className="text-sm text-muted-foreground">
@@ -60,15 +87,15 @@ export default function HomePage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted/40">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Caller</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Started</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Duration</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">LLM p50</th>
+            <thead className="border-b border-border bg-muted/50">
+              <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:text-left [&>th]:text-[11px] [&>th]:font-bold [&>th]:uppercase [&>th]:tracking-wider [&>th]:text-muted-foreground">
+                <th>Caller</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>LLM p50</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

@@ -57,21 +57,21 @@ export default function CallPage({ params }: { params: Promise<{ id: string }> }
             { label: "LLM p50", ms: call.latency_metrics?.llm_ms_p50 },
             { label: "TTS p50", ms: call.latency_metrics?.tts_ms_p50 },
           ].map(({ label, ms }) => (
-            <div key={label} className="rounded-lg border border-border p-4">
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className={`mt-1 text-xl font-semibold font-mono ${
+            <div key={label} className="rounded-lg border border-border bg-card p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+              <p className={`mt-2 font-mono text-xl font-semibold ${
                 ms == null ? "text-muted-foreground" :
-                ms < 300 ? "text-green-600 dark:text-green-400" :
-                ms < 700 ? "text-yellow-600 dark:text-yellow-400" :
-                "text-red-600 dark:text-red-400"
+                ms < 300 ? "text-green-600" :
+                ms < 700 ? "text-amber-600" :
+                "text-red-600"
               }`}>
                 {ms != null ? `${ms}ms` : "—"}
               </p>
             </div>
           ))}
-          <div className="rounded-lg border border-border p-4">
-            <p className="text-xs text-muted-foreground">Turns</p>
-            <p className="mt-1 text-xl font-semibold">{turns.length}</p>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Turns</p>
+            <p className="mt-2 font-mono text-xl font-semibold">{turns.length}</p>
           </div>
         </div>
       )}
