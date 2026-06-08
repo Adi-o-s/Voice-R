@@ -94,7 +94,7 @@ async def _verify_twilio(request: Request) -> None:
 # ---------------------------------------------------------------------------
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
