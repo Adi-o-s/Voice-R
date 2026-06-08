@@ -1,12 +1,12 @@
 # Voice AI Receptionist for Home Services
 
-> 📞 **Live phone demo on request** — talk to *Mike*, the AI receptionist for Acme Plumbing. He answers in ~1 second of perceived latency, books your appointment, sends an SMS confirmation, and escalates emergencies to the on-call plumber.
+> 📞 **Call Mike anytime** — talk to the AI receptionist for Acme Plumbing. He answers in ~1 second of perceived latency, books your appointment, sends an SMS confirmation, and escalates emergencies to the on-call plumber.
 >
-> 📊 **Live dashboard** *(brought up per demo window)* — real-time transcripts, bookings, and per-call latency analytics.
+> 📊 **[Live dashboard](https://voice-ai-receptionist-dashboard.vercel.app)** — real-time transcripts, bookings, and per-call latency analytics.
 >
 > 🎬 **90-second Loom walkthrough** — *link shared at outreach time.*
 
-*The public number, dashboard URL, and Loom are wired up per demo window rather than left running 24/7 (free-tier + ngrok). Ping me for a live walkthrough.*
+*The voice agent runs 24/7 on Render (free tier) with UptimeRobot keep-alive. Dashboard on Vercel. $0/month total.*
 
 ---
 
@@ -83,7 +83,8 @@ A few things that became real engineering, not just glue:
 - **TTS:** ElevenLabs Flash v2.5 (streaming)
 - **DB:** Supabase (Postgres + Realtime + RLS)
 - **Dashboard:** Next.js 15 + Tailwind + shadcn/ui on Vercel
-- **Dev tunnel:** ngrok
+- **Voice hosting:** Render free tier (Docker, always-on via UptimeRobot keep-alive)
+- **Monitoring:** UptimeRobot (5-min pings, public status page)
 
 Detailed design docs — HLD, LLD, and the ADRs behind these decisions — are maintained alongside the project and available on request.
 
@@ -101,13 +102,30 @@ cp infra/env/.env.example .env
 # 2. Apply DB schema
 make sql-apply
 
-# 3. Run voice agent + tunnel + dashboard
-make voice        # starts FastAPI + ngrok
-make dash         # in another terminal, starts Next.js
+# 3. Run voice agent + dashboard
+make voice        # starts FastAPI on :8000
+make dash         # in another terminal, starts Next.js on :3000
 
-# 4. Point your Twilio number's Voice webhook at the ngrok URL: <https://xxx.ngrok.app/twilio/voice>
+# 4. For local dev, use ngrok or similar tunnel:
+#    ngrok http 8000
+#    Then set PUBLIC_BASE_URL in .env to the ngrok URL
+#    and point your Twilio number's Voice webhook at <https://xxx.ngrok.app/twilio/voice>
 # 5. Call the number.
 ```
+
+## Deployment
+
+The voice agent and dashboard are deployed to free-tier infrastructure:
+
+| Component | Platform | URL |
+|---|---|---|
+| Voice agent | Render (Docker, free tier) | `https://voice-ai-receptionist.onrender.com` |
+| Dashboard | Vercel | `https://voice-ai-receptionist-dashboard.vercel.app` |
+| Uptime | UptimeRobot | Public status page |
+
+- **Voice agent**: Render auto-deploys from `main` using the `Dockerfile` in `apps/voice-agent/` and the `render.yaml` Blueprint at the repo root. UptimeRobot pings `/healthz` every 5 min to prevent Render's 15-min idle spin-down.
+- **Dashboard**: Vercel imports the repo with root directory set to `apps/dashboard`.
+- **Secrets**: API keys are set in each platform's dashboard, not in code.
 
 ## Repo layout
 
@@ -115,11 +133,13 @@ make dash         # in another terminal, starts Next.js
 .
 ├── apps/
 │   ├── voice-agent/     # Python: FastAPI + Pipecat pipeline (STT→LLM→TTS, tools, failover)
+│   │   └── Dockerfile   # Production image (Python 3.12 + uv)
 │   └── dashboard/       # Next.js 15: live transcripts, bookings, latency
 ├── docs/                # HLD, LLD, ADRs, sprint logs (Obsidian-renderable)
 ├── infra/
 │   ├── supabase/        # SQL migrations + seed
 │   └── env/             # .env.example (placeholders only)
+├── render.yaml          # Render Blueprint — infra-as-code for voice agent
 ├── .claude/commands/    # project-local slash commands (agile workflow)
 └── Makefile
 ```

@@ -1,0 +1,11 @@
+# Dev/test artifacts — not needed in production image
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+scripts/
+*.pyc
+.git/
+.gitignore
+README.md
