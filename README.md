@@ -119,7 +119,7 @@ The voice agent and dashboard are deployed to free-tier infrastructure:
 
 | Component | Platform | URL |
 |---|---|---|
-| Voice agent | Render (Docker, free tier) | `https://voice-ai-receptionist.onrender.com` |
+| Voice agent | Render (Docker, free tier) | `https://voice-ai-receptionist-ue6s.onrender.com` |
 | Dashboard | Vercel | `https://voice-ai-receptionist-dashboard.vercel.app` |
 | Uptime | UptimeRobot | Public status page |
 
