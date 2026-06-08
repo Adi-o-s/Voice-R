@@ -14,7 +14,10 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
@@ -23,6 +26,10 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
+    SpeechTimeoutUserTurnStopStrategy,
+)
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from starlette.websockets import WebSocket
 
 from src.context_window import SlidingWindowContext
@@ -75,11 +82,11 @@ async def build_pipeline(
         api_key=settings.deepgram_api_key,
         sample_rate=8000,
         # Serializer already converted mulaw→PCM; Deepgram receives linear16 at 8kHz.
-        # utterance_end_ms drives turn-taking (no VAD in Sprint 1, ADR-004).
+        # Turn-taking is driven by SpeechTimeoutUserTurnStopStrategy (see context_agg below),
+        # not utterance_end_ms — Pipecat 1.1.0 ignores UtteranceEnd events from Deepgram.
         settings=DeepgramSTTService.Settings(
             model="nova-3",
             interim_results=True,
-            utterance_end_ms=1000,
         ),
     )
 
@@ -96,8 +103,11 @@ async def build_pipeline(
 
     tts = ElevenLabsTTSService(
         api_key=settings.elevenlabs_api_key,
-        voice_id=settings.elevenlabs_voice_id,
-        model="eleven_flash_v2_5",
+        # voice_id and model params are deprecated in Pipecat 1.1.0 — use Settings instead.
+        settings=ElevenLabsTTSService.Settings(
+            voice=settings.elevenlabs_voice_id,
+            model="eleven_flash_v2_5",
+        ),
         sample_rate=8000,
     )
 
@@ -105,7 +115,19 @@ async def build_pipeline(
         messages=[{"role": "system", "content": build_system_prompt()}],
         tools=ToolsSchema(standard_tools=TOOL_FUNCTION_SCHEMAS),
     )
-    context_agg = LLMContextAggregatorPair(context)
+    # SpeechTimeoutUserTurnStopStrategy: pure-asyncio turn detection — no ONNX inference.
+    # The default LocalSmartTurnAnalyzerV3 runs heavy ONNX inference per 20ms audio chunk
+    # which stalls on Render's 0.1 vCPU, so Smart Turn never fires and the 5s fallback
+    # timeout commits the turn before Deepgram's final transcript arrives → LLM gets nothing.
+    # SpeechTimeoutUserTurnStopStrategy stops the turn 0.6s after the last Deepgram final
+    # transcript, with a generous fallback timeout for safety.
+    _user_turn_params = LLMUserAggregatorParams(
+        user_turn_strategies=UserTurnStrategies(
+            stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.6)],
+        ),
+        user_turn_stop_timeout=12.0,  # generous fallback if transcript never arrives
+    )
+    context_agg = LLMContextAggregatorPair(context, user_params=_user_turn_params)
 
     logger = ConversationLogger(call_sid=call_sid, caller_phone=caller_phone)
     user_tap = UserTranscriptTap(logger=logger)
