@@ -20,3 +20,17 @@ def send_sms(to: str, body: str) -> str:
         to=to,
     )
     return msg.sid
+
+
+def send_whatsapp(to: str, body: str) -> str:
+    """Send a WhatsApp message. Returns the message SID."""
+    from_num = settings.twilio_whatsapp_number or "+14155238886"
+    sender = from_num if from_num.startswith("whatsapp:") else f"whatsapp:{from_num}"
+    recipient = to if to.startswith("whatsapp:") else f"whatsapp:{to}"
+    
+    msg = twilio_client().messages.create(
+        body=body,
+        from_=sender,
+        to=recipient,
+    )
+    return msg.sid

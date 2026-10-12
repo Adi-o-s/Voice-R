@@ -83,7 +83,7 @@ export default function HomePage() {
       {calls.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/40 p-12 text-center">
           <p className="text-sm text-muted-foreground">
-            No calls yet. Dial +1 (620) 634-8082 to start.
+            No calls yet. Dial +1 (620) 634-8087 to start.
           </p>
         </div>
       ) : (

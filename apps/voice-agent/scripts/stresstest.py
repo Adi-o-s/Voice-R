@@ -16,6 +16,7 @@ Two modes:
 Usage:
   uv run python scripts/stresstest.py --mode probe --calls 12
   uv run python scripts/stresstest.py --mode load --calls 3 --turns 4
+  uv run python scripts/stresstest.py --mode load --calls 1 --turns 5 --script reschedule
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import functools
 import statistics
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Allow `python scripts/stresstest.py` to import the `src` package.
@@ -53,7 +55,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from src.context_window import SlidingWindowContext
 from src.llm_failover import FailoverLLMService
-from src.prompts import SYSTEM_PROMPT, TOOL_FUNCTION_SCHEMAS
+from src.prompts import BUSINESS_TZ, SYSTEM_PROMPT, TOOL_FUNCTION_SCHEMAS, build_system_prompt
 from src.settings import settings
 
 # ---------------------------------------------------------------------------
@@ -71,18 +73,45 @@ _STUB_RESPONSES: dict[str, object] = {
             {"id": "svc-drain", "name": "Drain Cleaning", "duration_min": 45},
         ],
     },
-    "check_availability": [
-        {"slot": "2026-05-23T09:00:00", "label": "tomorrow 9 AM"},
-        {"slot": "2026-05-23T14:00:00", "label": "tomorrow 2 PM"},
-    ],
-    "book_appointment": {"status": "confirmed", "confirmation_code": "TEST-001"},
+    "check_availability": None,  # built per request in _stub_result
+    "book_appointment": {"status": "confirmed", "confirmation_code": "TEST-001", "sms_sent": True},
     "escalate_emergency": {"status": "escalated", "eta_min": 30},
     "transfer_to_human": {"status": "transferred"},
+    "find_appointment": None,  # built per request in _stub_result
+    "reschedule_appointment": {"rescheduled": True, "confirmation_code": "ACM-TEST01", "sms_sent": True},
+    "cancel_appointment": {"cancelled": True, "confirmation_code": "ACM-TEST01", "sms_sent": True},
 }
 
 
-async def _stub_handler(fn_name: str, params) -> None:  # noqa: ANN001
-    await params.result_callback(_STUB_RESPONSES.get(fn_name, {"status": "ok"}))
+def _stub_result(fn_name: str, args: dict) -> object:
+    if fn_name == "check_availability":
+        day = str(args.get("date_iso", ""))[:10]
+        return {"available_slots": [f"{day}T{h:02d}:00:00-04:00" for h in (9, 14, 15)]}
+    if fn_name == "find_appointment":
+        now = datetime.now(BUSINESS_TZ)
+        monday = (now + timedelta(days=7 - now.weekday())).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        return {
+            "appointments": [
+                {
+                    "appointment_id": "appt-123",
+                    "confirmation_code": "ACM-TEST01",
+                    "service_id": "svc-leak",
+                    "service_name": "Leak Repair",
+                    "scheduled_at_iso": monday.isoformat(),
+                    "customer_name": "Jordan",
+                    "customer_address": "12 Maple Street",
+                }
+            ]
+        }
+    return _STUB_RESPONSES.get(fn_name) or {"status": "ok"}
+
+
+async def _stub_handler(fn_name: str, tool_log: list[str], params) -> None:  # noqa: ANN001
+    tool_log.append(fn_name)
+    log.info("tool_call", fn=fn_name, args=dict(params.arguments))
+    await params.result_callback(_stub_result(fn_name, params.arguments))
 
 log = structlog.get_logger("stresstest")
 
@@ -95,6 +124,22 @@ CALLER_TURNS = [
     "Great, thanks so much. That's all I needed.",
     "Actually, do you also handle water heaters?",
 ]
+
+CALLER_SCRIPTS = {
+    "booking": CALLER_TURNS,
+    "reschedule": [
+        "Hi, I've got an appointment next week and I need to move it.",
+        "Yeah, that's the one. Can we do Tuesday afternoon instead?",
+        "Two PM works.",
+        "Yes, that's correct, go ahead.",
+        "Thanks, that's all.",
+    ],
+    "cancel": [
+        "Hey, I need to cancel my appointment.",
+        "Yes, that one. Please cancel it.",
+        "Thanks, bye.",
+    ],
+}
 
 
 # --------------------------------------------------------------------------
@@ -189,10 +234,11 @@ class _TurnInjector(FrameProcessor):
     """Drives one synthetic call: feeds a user turn, waits for the assistant
     turn to finish, repeats."""
 
-    def __init__(self, call_id: int, turns: int) -> None:
+    def __init__(self, call_id: int, turns: int, script: list[str]) -> None:
         super().__init__()
         self._call_id = call_id
         self._turns = turns
+        self._script = script
         self._turn_done = asyncio.Event()
         self.saw_text = False
         self.saw_apology = False
@@ -209,7 +255,7 @@ class _TurnInjector(FrameProcessor):
 
     async def _run(self) -> None:
         for t in range(self._turns):
-            text = CALLER_TURNS[t % len(CALLER_TURNS)]
+            text = self._script[t % len(self._script)]
             self._turn_done.clear()
             await self.push_frame(
                 TranscriptionFrame(
@@ -257,9 +303,11 @@ class _TurnObserver(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
-async def _one_call(call_id: int, turns: int) -> dict:
+async def _one_call(call_id: int, turns: int, script: str) -> dict:
     context = LLMContext(
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}],
+        messages=[
+            {"role": "system", "content": build_system_prompt(caller_phone="+15550100142")}
+        ],
         tools=ToolsSchema(standard_tools=TOOL_FUNCTION_SCHEMAS),
     )
     agg = LLMContextAggregatorPair(context)
@@ -275,10 +323,11 @@ async def _one_call(call_id: int, turns: int) -> dict:
     )
 
     # Register stub handlers so function calls resolve instead of spiralling.
+    tool_log: list[str] = []
     for fn_name in _STUB_RESPONSES:
-        llm.register_function(fn_name, functools.partial(_stub_handler, fn_name))
+        llm.register_function(fn_name, functools.partial(_stub_handler, fn_name, tool_log))
 
-    injector = _TurnInjector(call_id, turns)
+    injector = _TurnInjector(call_id, turns, CALLER_SCRIPTS[script])
     observer = _TurnObserver(injector, agg.assistant())
 
     pipeline = Pipeline(
@@ -309,13 +358,14 @@ async def _one_call(call_id: int, turns: int) -> dict:
         "switched_to_groq": switched,
         "spoke_apology": injector.saw_apology,
         "ended_cleanly": injector.saw_endframe,
+        "tools": " > ".join(tool_log),
     }
 
 
-async def load(calls: int, turns: int) -> None:
-    log.info("load_start", calls=calls, turns=turns, primary=settings.gemini_model)
+async def load(calls: int, turns: int, script: str) -> None:
+    log.info("load_start", calls=calls, turns=turns, script=script, primary=settings.gemini_model)
     results = await asyncio.gather(
-        *[_one_call(i + 1, turns) for i in range(calls)], return_exceptions=True
+        *[_one_call(i + 1, turns, script) for i in range(calls)], return_exceptions=True
     )
     ok = [r for r in results if isinstance(r, dict)]
     for r in results:
@@ -342,12 +392,13 @@ def main() -> None:
     p.add_argument("--mode", choices=["probe", "load"], default="load")
     p.add_argument("--calls", type=int, default=3)
     p.add_argument("--turns", type=int, default=4)
+    p.add_argument("--script", choices=sorted(CALLER_SCRIPTS), default="booking")
     args = p.parse_args()
 
     if args.mode == "probe":
         asyncio.run(probe(args.calls))
     else:
-        asyncio.run(load(args.calls, args.turns))
+        asyncio.run(load(args.calls, args.turns, args.script))
 
 
 if __name__ == "__main__":

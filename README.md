@@ -1,8 +1,8 @@
 # Voice AI Receptionist for Home Services
 
-> 📞 **Call Mike anytime** — talk to the AI receptionist for Acme Plumbing. He answers in ~1 second of perceived latency, books your appointment, sends an SMS confirmation, and escalates emergencies to the on-call plumber.
+> 📞 **Call Mike anytime: +1 (620) 634-8087** — talk to the AI receptionist for Acme Plumbing. He answers in ~1 second of perceived latency, books your appointment, sends an SMS confirmation, and escalates emergencies to the on-call plumber.
 >
-> 📊 **[Live dashboard](https://voice-ai-receptionist-dashboard.vercel.app)** — real-time transcripts, bookings, and per-call latency analytics.
+> 📊 **[Live dashboard](https://ai-receptionist-2r6wuykhj-adi-o-s-projects.vercel.app)** — real-time transcripts, bookings, and per-call latency analytics.
 >
 > 🎬 **90-second Loom walkthrough** — *link shared at outreach time.*
 
@@ -30,6 +30,7 @@ Under the hood it's a streaming voice pipeline — telephony → speech-to-text 
 4. Mike asks: service type → urgency → name → address → preferred time → confirm.
 5. Booking is written to Postgres. Caller gets an SMS confirmation. Live dashboard updates in real time.
 6. If caller says emergency keywords ("burst pipe", "flooding", "gas smell"), Mike skips the booking flow and SMS-pages the on-call number.
+7. Call back and say "move my appointment" or "cancel it": Mike finds the booking by your caller ID, checks the new slot, and reschedules or cancels on the call.
 
 ## Architecture
 
@@ -39,7 +40,7 @@ flowchart LR
     Twilio[Twilio<br/>Programmable Voice]
     Pipeline[FastAPI + Pipecat<br/>Pipeline]
     Deepgram[Deepgram<br/>Nova-3 STT]
-    LLM[FailoverLLMService<br/>Gemini 2.0 Flash → Groq Llama]
+    LLM[FailoverLLMService<br/>Gemini 3.5 Flash-Lite → Groq GPT-OSS 120B]
     Eleven[ElevenLabs<br/>Flash v2.5 TTS]
     Supabase[(Supabase<br/>Postgres + Realtime)]
     Dashboard[Next.js<br/>Dashboard]
@@ -59,7 +60,7 @@ flowchart LR
 | Step | Budget | Provider |
 |---|---|---|
 | Audio → STT first token | ~150ms | Deepgram Nova-3 |
-| LLM TTFT | ~400ms | Gemini 2.0 Flash (primary) · ~250ms on Groq fallback |
+| LLM TTFT | ~400ms | Gemini 3.5 Flash-Lite (primary) · Groq GPT-OSS 120B fallback |
 | TTS first byte | ~200ms | ElevenLabs Flash v2.5 |
 | Twilio + network | ~200ms | — |
 | **Total perceived** | **~950ms** | first-word-to-first-word |
@@ -79,7 +80,7 @@ A few things that became real engineering, not just glue:
 - **Telephony:** Twilio Programmable Voice + Media Streams
 - **Orchestrator:** [Pipecat](https://github.com/pipecat-ai/pipecat) (Python, MIT, open-source)
 - **STT:** Deepgram Nova-3 (streaming)
-- **LLM:** Gemini 2.0 Flash (primary) with Groq `llama-3.3-70b-versatile` as a sticky fallback — both via native Pipecat function-calling adapters
+- **LLM:** Gemini 3.5 Flash-Lite (primary) with Groq `openai/gpt-oss-120b` as a sticky fallback — both via native Pipecat function-calling adapters
 - **TTS:** ElevenLabs Flash v2.5 (streaming)
 - **DB:** Supabase (Postgres + Realtime + RLS)
 - **Dashboard:** Next.js 15 + Tailwind + shadcn/ui on Vercel
@@ -120,7 +121,7 @@ The voice agent and dashboard are deployed to free-tier infrastructure:
 | Component | Platform | URL |
 |---|---|---|
 | Voice agent | Render (Docker, free tier) | `https://voice-ai-receptionist-ue6s.onrender.com` |
-| Dashboard | Vercel | `https://voice-ai-receptionist-dashboard.vercel.app` |
+| Dashboard | Vercel | `https://ai-receptionist-2r6wuykhj-adi-o-s-projects.vercel.app` |
 | Uptime | UptimeRobot | Public status page |
 
 - **Voice agent**: Render auto-deploys from `main` using the `Dockerfile` in `apps/voice-agent/` and the `render.yaml` Blueprint at the repo root. UptimeRobot pings `/healthz` every 5 min to prevent Render's 15-min idle spin-down.

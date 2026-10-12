@@ -2,7 +2,7 @@
 
 Pipecat v1.1.0. No VAD; Deepgram utterance_end drives turn-taking (ADR-004).
 TwilioFrameSerializer converts mulaw↔PCM internally, so STT receives linear16 PCM.
-Sprint 2 adds 5 LLM tools via llm.register_function() + ToolsSchema.
+LLM tools are registered via llm.register_function() + ToolsSchema.
 """
 
 from __future__ import annotations
@@ -40,9 +40,12 @@ from src.prompts import TOOL_FUNCTION_SCHEMAS, build_system_prompt
 from src.settings import settings
 from src.tools import (
     book_appointment,
+    cancel_appointment,
     check_availability,
     escalate_emergency,
+    find_appointment,
     get_business_info,
+    reschedule_appointment,
     transfer_to_human,
 )
 
@@ -112,7 +115,7 @@ async def build_pipeline(
     )
 
     context = LLMContext(
-        messages=[{"role": "system", "content": build_system_prompt()}],
+        messages=[{"role": "system", "content": build_system_prompt(caller_phone=caller_phone)}],
         tools=ToolsSchema(standard_tools=TOOL_FUNCTION_SCHEMAS),
     )
     # SpeechTimeoutUserTurnStopStrategy: pure-asyncio turn detection — no ONNX inference.
@@ -145,7 +148,9 @@ async def build_pipeline(
         await params.result_callback(result)
 
     async def _handle_book_appointment(params: FunctionCallParams) -> None:
-        result = await book_appointment(**params.arguments, _call_id=logger._call_id)
+        result = await book_appointment(
+            **params.arguments, _call_id=logger._call_id, _caller_phone=caller_phone
+        )
         await params.result_callback(result)
 
     async def _handle_escalate_emergency(params: FunctionCallParams) -> None:
@@ -156,11 +161,26 @@ async def build_pipeline(
         result = await transfer_to_human(**params.arguments, _call_id=logger._call_id)
         await params.result_callback(result)
 
+    async def _handle_find_appointment(params: FunctionCallParams) -> None:
+        result = await find_appointment(**params.arguments, _caller_phone=caller_phone)
+        await params.result_callback(result)
+
+    async def _handle_reschedule_appointment(params: FunctionCallParams) -> None:
+        result = await reschedule_appointment(**params.arguments, _call_id=logger._call_id)
+        await params.result_callback(result)
+
+    async def _handle_cancel_appointment(params: FunctionCallParams) -> None:
+        result = await cancel_appointment(**params.arguments)
+        await params.result_callback(result)
+
     llm.register_function("get_business_info", _handle_get_business_info)
     llm.register_function("check_availability", _handle_check_availability)
     llm.register_function("book_appointment", _handle_book_appointment)
     llm.register_function("escalate_emergency", _handle_escalate_emergency)
     llm.register_function("transfer_to_human", _handle_transfer_to_human)
+    llm.register_function("find_appointment", _handle_find_appointment)
+    llm.register_function("reschedule_appointment", _handle_reschedule_appointment)
+    llm.register_function("cancel_appointment", _handle_cancel_appointment)
 
     pipeline = Pipeline(
         [

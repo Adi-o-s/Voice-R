@@ -1,6 +1,6 @@
 """Sanity tests on the system prompt + tool schemas."""
 
-from src.prompts import SYSTEM_PROMPT, TOOL_SCHEMAS
+from src.prompts import SYSTEM_PROMPT, TOOL_FUNCTION_SCHEMAS, TOOL_SCHEMAS, build_system_prompt
 
 
 def test_system_prompt_has_persona():
@@ -17,15 +17,27 @@ def test_system_prompt_forbids_made_up_prices():
     assert "NEVER quote a price" in SYSTEM_PROMPT
 
 
-def test_all_five_tools_defined():
-    names = {t["function"]["name"] for t in TOOL_SCHEMAS}
-    assert names == {
+def test_all_tools_defined_in_both_schema_lists():
+    expected = {
         "get_business_info",
         "check_availability",
         "book_appointment",
         "escalate_emergency",
         "transfer_to_human",
+        "find_appointment",
+        "reschedule_appointment",
+        "cancel_appointment",
     }
+    assert {t["function"]["name"] for t in TOOL_SCHEMAS} == expected
+    assert {t.name for t in TOOL_FUNCTION_SCHEMAS} == expected
+
+
+def test_prompt_tells_the_model_the_callers_number():
+    assert "+15550100142" in build_system_prompt(caller_phone="+15550100142")
+
+
+def test_prompt_omits_a_withheld_caller_id():
+    assert "The caller is dialing from" not in build_system_prompt(caller_phone="anonymous")
 
 
 def test_each_tool_has_description_and_parameters():
@@ -42,4 +54,6 @@ def test_each_tool_has_description_and_parameters():
 def test_book_appointment_requires_confirmation_fields():
     fn = next(t["function"] for t in TOOL_SCHEMAS if t["function"]["name"] == "book_appointment")
     required = set(fn["parameters"]["required"])
-    assert {"service_id", "scheduled_at_iso", "customer_name", "customer_phone", "customer_address"}.issubset(required)
+    assert {"service_id", "scheduled_at_iso", "customer_name", "customer_address"}.issubset(required)
+    # Caller ID is the default; the model only passes a phone the caller dictated.
+    assert "customer_phone" not in required

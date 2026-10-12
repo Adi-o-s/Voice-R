@@ -19,9 +19,9 @@ services:
       - key: BUSINESS_SLUG
         value: acme-plumbing
       - key: GEMINI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-3.5-flash-lite
       - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
 
       # --- Secrets (set in Render dashboard) ---
       - key: PUBLIC_BASE_URL
