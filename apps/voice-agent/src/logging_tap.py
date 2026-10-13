@@ -62,6 +62,9 @@ class ConversationLogger(FrameProcessor):
         elif isinstance(frame, (EndFrame, CancelFrame)):
             # EndFrame = graceful end (bot said goodbye). CancelFrame = abrupt
             # hang-up; close here too, before the handler coroutine is cancelled.
+            # A caller who hangs up mid-reply never produces the
+            # LLMFullResponseEndFrame that normally logs the turn, so flush it.
+            await self._flush_assistant_turn()
             await self._close_call()
         elif isinstance(frame, LLMTextFrame):
             if not self._assistant_started_at:

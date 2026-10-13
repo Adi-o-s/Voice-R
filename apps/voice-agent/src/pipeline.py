@@ -216,6 +216,15 @@ async def build_pipeline(
         await task.queue_frames([TTSSpeakFrame(text=greeting)])
         log.info("greeting_queued", call_sid=call_sid)
 
+    @transport.event_handler("on_client_disconnected")
+    async def _on_disconnected(transport: FastAPIWebsocketTransport, ws: WebSocket) -> None:
+        # Twilio closes the socket when the caller hangs up, but nothing in the
+        # pipeline ends on its own: without this the task sits until Pipecat's
+        # 5-minute idle timeout, so the call row stays "in progress" that long
+        # and the LLM can still answer a caller who has already gone.
+        log.info("caller_disconnected", call_sid=call_sid)
+        await task.cancel()
+
     runner = PipelineRunner(handle_sigint=False)
     return runner, task, logger
 
